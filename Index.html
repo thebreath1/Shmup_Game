@@ -90,8 +90,8 @@
       <div class="tap blink">TAP THE KEYBOARD TO PLAY</div>
       <div id="lbAttract" class="lb"></div>
       <div class="ctrl">
-        MOVE: ARROWS/WASD | SHOOT: SPACE | ULTIMATE: U<br>
-        PAUSE: P/ESC | MUTE: M | CATCH FALLING BUFFS!
+        MOVE: ARROWS/WASD (diagonal supported) | SHOOT: SPACE<br>
+        ULTIMATE: U | PAUSE: P/ESC | MUTE: M | CATCH FALLING BUFFS!
       </div>
       <div class="copy">© 2025 SCHOOL ARCADE PROJECT</div>
     </div>
@@ -126,9 +126,9 @@ const CFG={
   BATCH_PAUSE:2,
   HP_MAX:100, HP_RESET:100,
   DMG_ENEMY:5, DMG_BOSS:10, DMG_SKILL:25,
-  AMMO_MAX:20, RELOAD_TIME:2,
+  AMMO_MAX:15, RELOAD_TIME:2,
   ULT_PER_KILL:10, ULT_PER_BOSSHIT:10, ULT_TIME:1, ULT_BOSS_TICK:2,
-  BOUNCE_FROM:3, BOUNCE_CHANCE:0.10, BOUNCE_MAX:3,
+  BOUNCE_FROM:3, BOUNCE_CHANCE:0.15, BOUNCE_MAX:5,
   BOSS_DMG_BASE:11,
   DROP_CHANCE:0.5, DROP_MAX:4,
 };
@@ -174,7 +174,7 @@ const SFX={
   win(){[523,659,784,1047,1319].forEach((f,i)=>tone(f,.2,"square",.12,0,i*.13));},
 };
 
-/* ================= LEADERBOARD (localStorage) ================= */
+/* ================= LEADERBOARD ================= */
 let playerName="PILOT";
 function lbLoad(){try{return JSON.parse(localStorage.getItem("nsLB")||"[]");}catch(e){return[];}}
 function lbSave(l){try{localStorage.setItem("nsLB",JSON.stringify(l));}catch(e){}}
@@ -212,10 +212,9 @@ const BOSSES=[null,
  {name:"VANGUARD",col:"#ff8c42",skill:"sweep", speed:1.2},
  {name:"CYCLONE", col:"#ffd24a",skill:"ring",  speed:1.35},
  {name:"PHANTOM", col:"#42c6ff",skill:"cross", speed:1.5},
- {name:"RAPTOR",  col:"#c44dff",skill:"dash",  speed:2.},
- {name:"OVERLORD",col:"#ff3d6e",skill:"spiral",speed:2.8},
+ {name:"RAPTOR",  col:"#c44dff",skill:"dash",  speed:1.65},
+ {name:"OVERLORD",col:"#ff3d6e",skill:"spiral",speed:1.8},
 ];
-/* Buff drops */
 const DROPS=[
  {id:"heal",  col:"#3dff7a",label:"H"},
  {id:"triple",col:"#ffd24a",label:"T"},
@@ -234,7 +233,7 @@ addEventListener("keydown",e=>{
   if(state==="attract"){if(!e.repeat){SFX.coin();openName();}return;}
   if(state==="nameentry"){
     if(k==="escape"&&!e.repeat){state="attract";nameOv.classList.add("hidden");attractOv.classList.remove("hidden");lbAttract.innerHTML=lbHTML(lbLoad(),-1);}
-    return; // ketikan ditangani input
+    return;
   }
   if(state==="gameover"||state==="victory"){if(!e.repeat&&endLock<=0)toAttract();return;}
   if(k==="p"||k==="escape"){if(!e.repeat)togglePause();return;}
@@ -247,7 +246,6 @@ addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false;});
 addEventListener("blur",()=>{for(const k in keys)keys[k]=false;if(state==="playing"&&!paused)togglePause(true);});
 function togglePause(f){paused=f===true?true:!paused;pauseOv.classList.toggle("hidden",!paused);}
 
-/* form nama */
 nameInput.addEventListener("input",()=>{nameInput.value=nameInput.value.replace(/[^a-zA-Z0-9]/g,"").toUpperCase().slice(0,5);});
 nameInput.addEventListener("keydown",e=>{e.stopPropagation();if(e.key==="Enter"){e.preventDefault();confirmName();}});
 startBtn.addEventListener("click",confirmName);
@@ -341,11 +339,12 @@ function spawnSquad(){
       flash:0,spawn:.4,dead:false});
   }
 }
-function hitEnemy(e,dmg){
+/* giveUlt=false -> kill dari ultimate TIDAK mengisi bar ultimate */
+function hitEnemy(e,dmg,giveUlt){
   if(e.dead)return;
   e.hp-=dmg;e.flash=.12;
   if(e.hp<=0){e.dead=true;kills++;score+=100*level;
-    ult=Math.min(100,ult+CFG.ULT_PER_KILL);
+    if(giveUlt!==false)ult=Math.min(100,ult+CFG.ULT_PER_KILL);
     explode(e.x,e.y,"#ff3d6e");SFX.boom();
     if(Math.random()<CFG.DROP_CHANCE)spawnDrop(e.x,e.y);
     bars();}
@@ -368,15 +367,15 @@ function fireEnemy(e,P){
   SFX.eShoot();
 }
 
-/* ================= BOSS (skill diskalakan per level) ================= */
+/* ================= BOSS ================= */
 function skillParams(){
   return {
-    tele:Math.max(.45,1.25-level*.15),          // telegraph makin singkat
-    sweepDur:Math.max(.9,2.1-level*.22),        // sweep makin cepat
-    sweepW:56+level*10,                          // sapuan makin lebar
+    tele:Math.max(.45,1.25-level*.15),
+    sweepDur:Math.max(.9,2.1-level*.22),
+    sweepW:56+level*10,
     ringN:7+level*3, ringS:110+level*18, rings:level>=4?3:2,
-    crossHW:9+level*2,                           // laser cross makin tebal
-    dashS:360+level*60,                          // dash makin kencang
+    crossHW:9+level*2,
+    dashS:360+level*60,
     spiralEmit:Math.max(.05,.13-level*.012), spiralDur:1.1+level*.25,
   };
 }
@@ -384,6 +383,10 @@ function spawnBoss(){
   boss={x:W/2,y:-70,ty:95,hp:100,maxHp:100,w:52,h:48,t:0,ph:Math.random()*6,flash:0,
     state:"enter",reT:0,tx:W/2,tyy:95,skillT:Math.max(2.5,4.5-level*.3),fireT:1.2,
     spiralT:0,spiralA:0,emit:0,rings:0,ringT:0,teleT:0,tx2:0,ty2:0,dvx:0,dvy:0,trail:0,dead:false};
+  // REVISI 3: buff dari fase musuh biasa di-reset saat fase boss
+  player.tripleT=0;player.rapidT=0;player.shield=0;
+  ammoMax=CFG.AMMO_MAX;player.ammo=Math.min(player.ammo,ammoMax);
+  addFloat(player.x,player.y-26,"BUFFS RESET!","#ff5c5c");
   ult=0;bars();
 }
 function bossBullet(x,y,vx,vy){eB.push({x:x,y:y,vx:vx,vy:vy,bouncy:false,bounces:0,dmg:CFG.DMG_BOSS,col:"#c44dff",dead:false});SFX.eShoot();}
@@ -458,8 +461,11 @@ function update(dt){
     const sp=280,
       lf=keys["arrowleft"]||keys["a"],rt=keys["arrowright"]||keys["d"],
       up=keys["arrowup"]||keys["w"],dn=keys["arrowdown"]||keys["s"];
-    player.x=clamp(player.x+((rt?1:0)-(lf?1:0))*sp*dt,16,W-16);
-    player.y=clamp(player.y+((dn?1:0)-(up?1:0))*sp*dt,H*.5,H-22);
+    // REVISI 1: gerak diagonal (dinormalisasi supaya tidak lebih cepat)
+    let mx=(rt?1:0)-(lf?1:0), my=(dn?1:0)-(up?1:0);
+    if(mx!==0&&my!==0){mx*=0.7071;my*=0.7071;}
+    player.x=clamp(player.x+mx*sp*dt,16,W-16);
+    player.y=clamp(player.y+my*sp*dt,H*.5,H-22);
     player.cool-=dt;player.inv=Math.max(0,player.inv-dt);
     player.tripleT=Math.max(0,player.tripleT-dt);
     player.rapidT=Math.max(0,player.rapidT-dt);
@@ -476,12 +482,12 @@ function update(dt){
   }
   player.scale+=((ultT>0?2:1)-player.scale)*Math.min(1,dt*10);
 
-  /* ultimate beam */
+  /* ultimate beam (kill di sini TIDAK mengisi ultimate) */
   if(ultT>0){
     ultT-=dt;ultTick-=dt;
     if(ultTick<=0){ultTick=.12;
       const bw=W*.9,bx=clamp(player.x-bw/2,0,W-bw);
-      for(const e of enemies)if(!e.dead&&e.x>bx-8&&e.x<bx+bw+8&&e.y<player.y)hitEnemy(e,e.hp);
+      for(const e of enemies)if(!e.dead&&e.x>bx-8&&e.x<bx+bw+8&&e.y<player.y)hitEnemy(e,e.hp,false);
       for(const b of eB)if(b.x>bx-8&&b.x<bx+bw+8&&b.y<player.y){b.dead=true;explode(b.x,b.y,b.col,4);}
       if(boss&&!boss.dead&&boss.state!=="enter"&&boss.x>bx-8&&boss.x<bx+bw+8){
         boss.hp-=CFG.ULT_BOSS_TICK;boss.flash=.1;
@@ -533,7 +539,7 @@ function update(dt){
     }else if(b.y>H+20||b.y<-20||b.x<-20||b.x>W+20)b.dead=true;
   }
 
-  /* drops jatuh mengarah ke pemain */
+  /* drops */
   for(const d of drops){
     d.vx=clamp((player.x-d.x)*2,-90,90);
     d.x+=d.vx*dt;d.y+=d.vy*dt;
@@ -577,7 +583,7 @@ function update(dt){
   pB=pB.filter(b=>!b.dead);
   eB=eB.filter(b=>!b.dead);
 
-  /* alur fase: wave 1 -> langsung boss */
+  /* alur fase */
   if(!player.alive){if(phase==="dying"){phaseT-=dt;if(phaseT<=0)endGame(false);}bars();return;}
   if(phase==="banner"){phaseT-=dt;if(phaseT<=0){phase="combat";batch=1;spawnSquad();}}
   else if(phase==="combat"){
